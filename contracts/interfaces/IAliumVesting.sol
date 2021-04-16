@@ -40,7 +40,14 @@ interface IAliumVesting {
         view
         returns (uint256 timestamp, uint256 amount);
 
-    function claim(address beneficiary) external returns (bool success);
+    function claimAll(address beneficiary) external returns (bool success);
+
+    function claim(address beneficiary, uint planId) external returns (bool success);
+
+    function pendingReward(address beneficiary, uint256 planId)
+        external
+        view
+        returns (uint256 reward);
 
     function setReleaseTime(uint256 time) external;
 }

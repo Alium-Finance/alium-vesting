@@ -8,6 +8,8 @@
   },
   "dependencies": {
     "@openzeppelin/contracts": "^3.0.0",
+    "bignumber.js": "^9.0.1",
+    "moment": "^2.29.1",
     "web3": "^1.3.4"
   },
   "devDependencies": {
@@ -31,7 +33,8 @@
     "lint": "solhint 'contracts/**/*.sol' --ignore-path .solhintignore",
     "prettier": "npx prettier --write 'contracts/**/*.sol'",
     "lint:js": "eslint .",
-    "lint:js:fix": "eslint . --fix"
+    "lint:js:fix": "eslint . --fix",
+    "dist": "mkdir flat && truffle-flattener  ./contracts/AliumCashbox.sol > ./flat/AliumCashbox.Full.sol"
   },
   "repository": {
     "type": "git",
