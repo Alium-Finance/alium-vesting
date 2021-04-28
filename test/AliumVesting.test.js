@@ -1,132 +1,182 @@
 // eslint-disable-next-line no-unused-vars
 const {
-  BN,
-  constants,
-  expectEvent,
-  expectRevert,
-  time,
-  ether
+    BN,
+    expectEvent,
+    expectRevert,
+    time,
+    ether,
 } = require('@openzeppelin/test-helpers');
-const { accounts, defaultSender } = require('@openzeppelin/test-environment');
-const { default: BigNumber } = require('bignumber.js');
-const { assert, expect } = require('chai');
+const { assert } = require('chai');
 
 const AliumVesting = artifacts.require('AliumVesting');
 const ALM = artifacts.require('MockALM');
 const AliumCash = artifacts.require('MockAliumCashbox');
 
-const moment = require('moment');
-const should = require('chai').should();
+contract('AliumVesting contract', (accounts) => {
+    const OWNER = accounts[0];
+    const HOLDER = accounts[1];
+    const FREEZE_MASTER = accounts[2];
+    const HACKER = accounts[3];
 
-let cashbox, vesting, aliumToken;
+    let cashbox, vesting, aliumToken;
 
-describe('AliumVesting contract', () => {
-  const initialOwner = accounts[0];
-  const tokenPool = accounts[1];
-  const userBob = accounts[2];
-  const userAlice = accounts[3];
-  const userClark = accounts[4];
-  let r = { logs:'' };
+    let releaseTime;
 
-  beforeEach(async function () {
-    this.aliumToken = await ALM.new();
-    this.cashbox = await AliumCash.new();
-    await this.cashbox.initialize(this.aliumToken.address, initialOwner);
-    this.vesting = await AliumVesting.new(this.aliumToken.address, this.cashbox.address, userClark);
-    await this.vesting.addLockPlan(0, [60*60*24*7, 60*60*24*14, 60*60*24*21], [33, 33, 34]);
-    await this.vesting.addLockPlan(1, [60*60*24*5, 60*60*24*10, 60*60*24*15, 60*60*24*20], [25, 25, 25, 25]);
-    await this.vesting.addLockPlan(2, [60*60*24*3, 60*60*24*6, 60*60*24*9, 60*60*24*12, 60*60*24*15], [20, 20, 20, 20, 20]);
+    const ONE_DAY = 60 * 60 * 24;
+    const ALM_TOTAL_SUPPLY = ether('250000000');
 
-    await this.aliumToken.transfer(this.cashbox.address, ether('250000000'));
-    await this.cashbox.setWalletLimit(this.vesting.address, ether('50000000'));
-  });
+    beforeEach(async function () {
+        aliumToken = await ALM.new();
+        cashbox = await AliumCash.new();
 
-  describe('As a generic user we', async function () {
-    it('Cannot freeze tokens by ourself', async function () {
-      await this.aliumToken.transfer(userBob, ether('5000'));
-      let b = await this.aliumToken.balanceOf(userBob);
-      assert.equal(b.toString(10), ether('5000').toString(10));
-      expectRevert(this.vesting.freeze(userBob, ether('5000'), 1, {from: userBob}), 'Method not allowed');
+        await cashbox.initialize(aliumToken.address, OWNER);
+
+        releaseTime = new BN(await time.latest()).addn(100);
+
+        vesting = await AliumVesting.new(
+            aliumToken.address,
+            cashbox.address,
+            FREEZE_MASTER,
+            releaseTime.toString(),
+        );
+
+        await vesting.addLockPlan(0, [ONE_DAY * 7, ONE_DAY * 14, ONE_DAY * 21], [33, 33, 34]);
+        await vesting.addLockPlan(1, [ONE_DAY * 5, ONE_DAY * 10, ONE_DAY * 15, ONE_DAY * 20], [25, 25, 25, 25]);
+        await vesting.addLockPlan(2, [ONE_DAY * 3, ONE_DAY * 6, ONE_DAY * 9, ONE_DAY * 12, ONE_DAY * 15], [20, 20, 20, 20, 20]);
+
+        await aliumToken.transfer(HOLDER, ether('5000'));
+        await aliumToken.transfer(HACKER, ether('5000'));
+        await aliumToken.transfer(cashbox.address, ALM_TOTAL_SUPPLY.sub(ether('5000')).sub(ether('5000')));
+
+        await cashbox.setWalletLimit(vesting.address, ALM_TOTAL_SUPPLY);
     });
 
-    it('Can get simple frozen token balance', async function () {
-      const PLAN_ID = 1
-      let tx = await this.vesting.freeze(userBob, ether('9000'), PLAN_ID); // freeze 9000
-      expectEvent.inLogs(tx.logs,'TokensLocked');
+    describe('As a generic user we', async function () {
+        it('Should fail if freeze account without permissions', async function () {
+            const b = await aliumToken.balanceOf(HOLDER);
 
-      console.log("Gas used for freeze: %d", tx.receipt.gasUsed);
+            assert.equal(b.toString(10), ether('5000').toString(10));
 
-      let balance = await this.vesting.getBalanceOf(userBob, PLAN_ID);
+            await expectRevert(
+                vesting.freeze(HOLDER, ether('5000'), 1, { from: HOLDER }),
+                'Vesting: caller is not the freezer');
+            await expectRevert(
+                vesting.freeze(HOLDER, ether('5000'), 1, { from: HACKER }),
+                'Vesting: caller is not the freezer',
+            );
+        });
 
-      assert.equal(balance.totalBalance.toString(), ether('9000').toString());
-      assert.equal(balance.frozenBalance.toString(), ether('9000').toString());
-      assert.equal(balance.withdrawnBalance.toString(), '0');
+        it('Should returns valid unlock timestamps and amounts', async function () {
+            const tokenAmount = 1000;
+            const firstPlanUnlockOffset = ONE_DAY * 7;
+            const secondPlanUnlockOffset = ONE_DAY * 5;
+            const thirdPlanUnlockOffset = ONE_DAY * 3;
+
+            let unlockResult0 = await vesting.getNextUnlockAt(0);
+            let unlockResult1 = await vesting.getNextUnlockAt(1);
+            let unlockResult2 = await vesting.getNextUnlockAt(2);
+
+            assert.equal(unlockResult0.timestamp.toString(), releaseTime.addn(firstPlanUnlockOffset).toString());
+            assert.equal(unlockResult1.timestamp.toString(), releaseTime.addn(secondPlanUnlockOffset).toString());
+            assert.equal(unlockResult2.timestamp.toString(), releaseTime.addn(thirdPlanUnlockOffset).toString());
+
+            assert.equal(unlockResult0.amount.toString(), 0);
+            assert.equal(unlockResult1.amount.toString(), 0);
+            assert.equal(unlockResult2.amount.toString(), 0);
+
+            await vesting.freeze(HOLDER, tokenAmount, 0, { from: FREEZE_MASTER }); // freeze
+            await vesting.freeze(HOLDER, tokenAmount, 1, { from: FREEZE_MASTER }); // freeze
+            await vesting.freeze(HOLDER, tokenAmount, 2, { from: FREEZE_MASTER }); // freeze
+
+            unlockResult0 = await vesting.getNextUnlockAt(0);
+            unlockResult1 = await vesting.getNextUnlockAt(1);
+            unlockResult2 = await vesting.getNextUnlockAt(2);
+
+            assert.isAbove(unlockResult0.amount.toNumber(), 0);
+            assert.isAbove(unlockResult1.amount.toNumber(), 0);
+            assert.isAbove(unlockResult2.amount.toNumber(), 0);
+            assert.isAbove(Number(await aliumToken.balanceOf(vesting.address)), 0);
+        });
+
+        it('Should success if freeze from freezer account', async function () {
+            const planID = 1;
+
+            const tx = await vesting.freeze(HOLDER, ether('9000'), planID, { from: FREEZE_MASTER }); // freeze 9000
+            expectEvent.inLogs(tx.logs, 'TokensLocked');
+
+            console.log('Gas used for freeze: %d', tx.receipt.gasUsed);
+
+            const balance = await vesting.getBalanceOf(HOLDER, planID);
+
+            assert.equal(balance.totalBalance.toString(), ether('9000').toString());
+            assert.equal(balance.frozenBalance.toString(), ether('9000').toString());
+            assert.equal(balance.withdrawnBalance.toString(), '0');
+            assert.equal((await aliumToken.balanceOf(vesting.address)).toString(), ether('9000').toString());
+        });
+
+        it('Can get frozen balances with several consecutive locks', async function () {
+            const tokenAmount = 8000;
+            const planID = 2;
+
+            await vesting.freeze(HOLDER, tokenAmount, planID, { from: FREEZE_MASTER });
+
+            assert.equal((await vesting.getBalanceOf(HOLDER, planID)).frozenBalance.toString(), tokenAmount);
+
+            const balancePendingBefore = await vesting.pendingReward(HOLDER, planID);
+            await time.increaseTo(releaseTime.addn(100));
+
+            assert.equal((await vesting.getBalanceOf(HOLDER, planID)).frozenBalance.toString(), tokenAmount);
+
+            await time.increaseTo(releaseTime.add(time.duration.days(92)));
+
+            const balancePendingAfter = await vesting.pendingReward(HOLDER, planID);
+
+            assert.equal(balancePendingBefore.toString(), 0);
+            assert.equal(balancePendingAfter.toString(), tokenAmount);
+        });
+
+        it('Should fail on claim if beneficiary is not sender', async function () {
+            const planID = 0;
+
+            await expectRevert(
+                vesting.claim(HOLDER, planID, { from: HACKER }),
+                'Vesting: caller is not the beneficiary',
+            );
+            await expectRevert(
+                vesting.claim(HOLDER, planID, { from: HACKER }),
+                'Vesting: caller is not the beneficiary',
+            );
+        });
+
+        it('Should success claim tokens from pool 3 after 100% freeze period', async function () {
+            const tokenAmount = 100000000;
+            const planID = 2;
+            const thirdPlanUnlockOffset = ONE_DAY * 3;
+            const allTimeOffset = ONE_DAY * 1000;
+
+            await time.increase((await time.latest()).add(new BN(thirdPlanUnlockOffset)).addn(100));
+
+            await vesting.freeze(HOLDER, tokenAmount, planID, { from: FREEZE_MASTER });
+            await vesting.claim(HOLDER, planID, { from: HOLDER });
+
+            assert.equal((await aliumToken.balanceOf(vesting.address)).toString(), 0);
+ 
+            // check claim second time
+            await vesting.freeze(HOLDER, 1000, planID, { from: FREEZE_MASTER });
+            await vesting.claim(HOLDER, planID, { from: HOLDER });
+
+            assert.equal((await aliumToken.balanceOf(vesting.address)).toString(), 0);
+      
+            // check claim all
+            await time.increase((await time.latest()).add(new BN(allTimeOffset)).addn(100));
+
+            await vesting.freeze(HOLDER, 1000, 0, { from: FREEZE_MASTER });
+            await vesting.freeze(HOLDER, 2000, 1, { from: FREEZE_MASTER });
+            await vesting.freeze(HOLDER, 3000, 2, { from: FREEZE_MASTER });
+
+            await vesting.claimAll(HOLDER, { from: HOLDER });
+
+            assert.equal((await aliumToken.balanceOf(vesting.address)).toString(), 0);
+        });
     });
-
-    it.skip('Can get frozen balances with several consecutive locks', async function () {
-      await this.aliumToken.transfer(this.vesting.address, 8000);
-      await this.vesting.freeze(userBob, 8000, 2); // freeze 8000 quarterly
-
-      let releaseTime = (await time.latest()).add(time.duration.days(92));
-      await time.increaseTo(releaseTime);
-      let b = await this.vesting.balanceOf(userBob);
-      assert.equal(b, 8000);
-      b = await this.vesting.unlockedBalanceOf(userBob);
-      assert.equal(b, 2000);
-      await time.increaseTo(releaseTime.add(time.duration.days(92)));
-      b = await this.vesting.balanceOf(userBob);
-      assert.equal(b, 8000);
-      b = await this.vesting.unlockedBalanceOf(userBob);
-      assert.equal(b, 4000);
-    });
-
-    it('Can get frozen virtual balances', async function () {
-
-    });
-
-    it('Can claim partially unlocked tokens', async function () {
-
-    });
-
-    it('Can mint virtual tokens', async function () {
-    });
-
-    it('Can view own locks', async function () {
-    });
-
-    it('Can view own stats', async function () {
-    });
-
-    it('Can get next unlock date', async function () {
-
-    });
-
-    it('Cannot view other users locks', async function () {
-
-    });
-
-  });
-
-  describe('As an admin user we', async function () {
-    beforeEach(async function() {
-      await this.aliumToken.transfer(this.vesting.address, 4000);
-      await this.vesting.freeze(userBob, 4000, 1); // freeze 9000 for 2 years quarterly
-    });
-
-    it('Can freeze tokens', async function () {
-
-    });
-
-    it('Can get user locks length', async function () {
-
-    });
-
-    it('Can view own locks', async function () {
-
-    });
-
-    it('Can view all locks', async function () {
-
-    });
-  });
 });

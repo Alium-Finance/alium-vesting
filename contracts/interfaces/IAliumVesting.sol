@@ -30,24 +30,22 @@ interface IAliumVesting {
         uint256 withdrawnBalance
     );
 
-    function getNextUnlock(address beneficiary)
+    function getNextUnlockFor(address beneficiary)
         external
         view
         returns (uint256 timestamp, uint256 amount);
 
-    function getNextUnlock(uint256 planId)
+    function getNextUnlockAt(uint256 planId)
         external
         view
         returns (uint256 timestamp, uint256 amount);
 
-    function claimAll(address beneficiary) external returns (bool success);
+    function claimAll(address beneficiary) external;
 
-    function claim(address beneficiary, uint planId) external returns (bool success);
+    function claim(address beneficiary, uint planId) external;
 
     function pendingReward(address beneficiary, uint256 planId)
         external
         view
         returns (uint256 reward);
-
-    function setReleaseTime(uint256 time) external;
 }
