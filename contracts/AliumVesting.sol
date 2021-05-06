@@ -66,20 +66,20 @@ contract AliumVesting is Ownable, IAliumVesting {
     /**
      * @dev Returns unlock date and amount of given lock.
      */
-    function getLockPlanLen(uint256 planId)
+    function getLockPlanLen(uint256 _planId)
         external
         view
         returns (uint256)
     {
-        require(planId < MAX_LOCK_PLANS, "Vesting: planId is out of range");
+        require(_planId < MAX_LOCK_PLANS, "Vesting: planId is out of range");
 
-        return lockPlanTimes[planId].length;
+        return lockPlanTimes[_planId].length;
     }
 
     /**
      * @dev Returns closest unlock date and amount.
      */
-    function getNextUnlockFor(address beneficiary)
+    function getNextUnlockFor(address _beneficiary)
         external
         view
         override
@@ -90,9 +90,9 @@ contract AliumVesting is Ownable, IAliumVesting {
             (uint256 t2, uint256 percent) = _getNextUnlock(i);
             if (t2 < timestamp) {
                 timestamp = t2;
-                amount = _lockTable[beneficiary][i].mul(percent).div(100);
+                amount = _lockTable[_beneficiary][i].mul(percent).div(100);
             } else if (t2 == timestamp) {
-                amount = amount.add(_lockTable[beneficiary][i].mul(percent).div(100));
+                amount = amount.add(_lockTable[_beneficiary][i].mul(percent).div(100));
             }
         }
 
@@ -102,24 +102,24 @@ contract AliumVesting is Ownable, IAliumVesting {
     /**
      * @dev Returns the total amount of next unlock amounts for different plans.
      */
-    function getNextUnlockAt(uint256 planId)
+    function getNextUnlockAt(uint256 _planId)
         external
         view
         override
         returns (uint256 timestamp, uint256 amount)
     {
-        require(planId < MAX_LOCK_PLANS, "Vesting: planId is out of range");
+        require(_planId < MAX_LOCK_PLANS, "Vesting: planId is out of range");
 
-        (uint256 unlockTime, uint256 unlockPercents) = _getNextUnlock(planId);
+        (uint256 unlockTime, uint256 unlockPercents) = _getNextUnlock(_planId);
 
-        return (unlockTime, _lockedTotal[planId].mul(unlockPercents).div(100));
+        return (unlockTime, _lockedTotal[_planId].mul(unlockPercents).div(100));
     }
 
     /**
      * @dev returns balances(total frozen, available frozen, withdrawn) of
-     * {beneficiary} for all plans
+     * {_beneficiary} for all plans
      */
-    function getTotalBalanceOf(address beneficiary)
+    function getTotalBalanceOf(address _beneficiary)
         external
         view
         override
@@ -131,9 +131,9 @@ contract AliumVesting is Ownable, IAliumVesting {
     {
         uint8 i = 0;
         for (; i < MAX_LOCK_PLANS; i++) {
-            totalBalance = totalBalance.add(_lockTable[beneficiary][i]);
+            totalBalance = totalBalance.add(_lockTable[_beneficiary][i]);
             withdrawnBalance = withdrawnBalance.add(
-                _withdrawTable[beneficiary][i]
+                _withdrawTable[_beneficiary][i]
             );
         }
 
@@ -146,9 +146,9 @@ contract AliumVesting is Ownable, IAliumVesting {
 
     /**
      * @dev returns balances(total frozen, available frozen, withdrawn) of
-     * {beneficiary} by {planId}
+     * {_beneficiary} by {_planId}
      */
-    function getBalanceOf(address beneficiary, uint256 planId)
+    function getBalanceOf(address _beneficiary, uint256 _planId)
         external
         view
         override
@@ -158,10 +158,10 @@ contract AliumVesting is Ownable, IAliumVesting {
             uint256 withdrawnBalance
         )
     {
-        require(planId < MAX_LOCK_PLANS, "Vesting: planId is out of range");
+        require(_planId < MAX_LOCK_PLANS, "Vesting: planId is out of range");
 
-        totalBalance = _lockTable[beneficiary][planId];
-        withdrawnBalance = _withdrawTable[beneficiary][planId];
+        totalBalance = _lockTable[_beneficiary][_planId];
+        withdrawnBalance = _withdrawTable[_beneficiary][_planId];
 
         return (
             totalBalance,
@@ -219,47 +219,47 @@ contract AliumVesting is Ownable, IAliumVesting {
     }
 
     /**
-     * @dev freeze some token {amount} by alium collectible type,
-     * what represented as {vestingPlanId}
+     * @dev freeze some token {_amount} by alium collectible type,
+     * what represented as {_planId}
      *
      * Permission: {onlyFreezer}
      */
     function freeze(
-        address beneficiary,
-        uint256 amount,
-        uint8 vestingPlanId
+        address _beneficiary,
+        uint256 _amount,
+        uint8 _planId
     ) external override onlyFreezer returns (bool success) {
-        require(beneficiary != address(0), "Vesting: beneficiary address cannot be 0");
-        require(vestingPlanId < MAX_LOCK_PLANS, "Vesting: planId is out of range");
+        require(_beneficiary != address(0), "Vesting: beneficiary address cannot be 0");
+        require(_planId < MAX_LOCK_PLANS, "Vesting: planId is out of range");
 
-        _lockTable[beneficiary][vestingPlanId] =
-        _lockTable[beneficiary][vestingPlanId].add(amount);
-        _lockedTotal[vestingPlanId] = _lockedTotal[vestingPlanId].add(amount);
-        IAliumCash(cashier).withdraw(amount);
-        emit TokensLocked(beneficiary, amount);
+        _lockTable[_beneficiary][_planId] =
+        _lockTable[_beneficiary][_planId].add(_amount);
+        _lockedTotal[_planId] = _lockedTotal[_planId].add(_amount);
+        IAliumCash(cashier).withdraw(_amount);
+        emit TokensLocked(_beneficiary, _amount);
 
         return true;
     }
 
     /**
-     * @dev add a new blocking plan with a specific {planId}, {times} and
-     * {percents} allocation
+     * @dev add a new blocking plan with a specific {_planId}, {_times} and
+     * {_percents} allocation
      *
      * Permission: {onlyOwner}
      */
     function addLockPlan(
-        uint256 planId,
-        uint256[] calldata times,
-        uint256[] calldata percents
+        uint256 _planId,
+        uint256[] calldata _times,
+        uint256[] calldata _percents
     ) external onlyOwner {
-        require(planId < MAX_LOCK_PLANS, "Vesting: planId is out of range");
+        require(_planId < MAX_LOCK_PLANS, "Vesting: planId is out of range");
 
-        uint items = percents.length;
+        uint items = _percents.length;
 
-        require(lockPlanTimes[planId].length == 0, "Vesting: plan update is not possible");
+        require(lockPlanTimes[_planId].length == 0, "Vesting: plan update is not possible");
         require(items > 0, "Vesting: invalid percents length");
         require(
-            items == times.length,
+            items == _times.length,
             "Vesting: percents length not equal times length"
         );
         require(items < MAX_PLAN_LENGTH, "Vesting: plan length is too large");
@@ -267,22 +267,22 @@ contract AliumVesting is Ownable, IAliumVesting {
         uint i = 0;
         uint currentFillPercent = 0;
         for (; i < items; i++) {
-            require(percents[i] > 0, "Vesting: wrong percents configs, zero set");
+            require(_percents[i] > 0, "Vesting: wrong percents configs, zero set");
             if (i > 0) {
-                require(times[i] > times[i-1], "Vesting: previous percent higher then current");
+                require(_times[i] > _times[i-1], "Vesting: previous percent higher then current");
             }
-            currentFillPercent += percents[i];
+            currentFillPercent += _percents[i];
         }
 
         require(currentFillPercent == SYS_DECIMAL, "Vesting: wrong percents configs by total sum");
 
         i = 0;
         for (; i < items; i++) {
-            lockPlanPercents[planId].push(percents[i]);
-            lockPlanTimes[planId].push(times[i]);
+            lockPlanPercents[_planId].push(_percents[i]);
+            lockPlanTimes[_planId].push(_times[i]);
         }
 
-        emit PlanAdded(planId);
+        emit PlanAdded(_planId);
     }
 
     /**
@@ -291,20 +291,20 @@ contract AliumVesting is Ownable, IAliumVesting {
      * Permission: {onlyOwner}
      */
     function transferAnyERC20Token(
-        address tokenAddress,
-        address beneficiary,
-        uint256 tokens
+        address _tokenAddress,
+        address _beneficiary,
+        uint256 _tokens
     ) external onlyOwner returns (bool success) {
-        require(tokenAddress != address(0), "Vesting: token address cannot be 0");
-        require(tokenAddress != token, "Vesting: token cannot be ours");
+        require(_tokenAddress != address(0), "Vesting: token address cannot be 0");
+        require(_tokenAddress != token, "Vesting: token cannot be ours");
 
-        return IERC20(tokenAddress).transfer(beneficiary, tokens);
+        return IERC20(_tokenAddress).transfer(_beneficiary, _tokens);
     }
 
     /**
      * @dev returns next unlock timestamp and unlock percent
      */
-    function _getNextUnlock(uint256 planId)
+    function _getNextUnlock(uint256 _planId)
         internal
         view
         returns (uint256, uint256)
@@ -318,24 +318,24 @@ contract AliumVesting is Ownable, IAliumVesting {
         uint256 _unlockPercents;
         uint256 k = 0xFFFFFFF;
 
-        for (uint256 j = 0; j < lockPlanTimes[planId].length; j++) {
-            if (lockPlanTimes[planId][j] + releaseTime <= block.timestamp) {
+        for (uint256 j = 0; j < lockPlanTimes[_planId].length; j++) {
+            if (lockPlanTimes[_planId][j] + releaseTime <= block.timestamp) {
                 k = j;
             }
         }
         if (k == 0xFFFFFFF) {
             // no release time met yet, set first unlock point
-            _unlockPercents = lockPlanPercents[planId][0];
-            _unlockTime = lockPlanTimes[planId][0] + releaseTime;
+            _unlockPercents = lockPlanPercents[_planId][0];
+            _unlockTime = lockPlanTimes[_planId][0] + releaseTime;
         } else {
-            if (k == lockPlanTimes[planId].length - 1) {
+            if (k == lockPlanTimes[_planId].length - 1) {
                 // all release points passed
                 _unlockPercents = 0;
                 _unlockTime = 0;
             } else {
                 // k is the last passed release point, get next release point
-                _unlockPercents = lockPlanPercents[planId][k + 1];
-                _unlockTime = lockPlanTimes[planId][k + 1] + releaseTime;
+                _unlockPercents = lockPlanPercents[_planId][k + 1];
+                _unlockTime = lockPlanTimes[_planId][k + 1] + releaseTime;
             }
         }
 
