@@ -3,7 +3,6 @@ pragma solidity ^0.6.12;
 
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./libraries/TransferHelper.sol";
 import "./interfaces/IAliumVesting.sol";
 import "./interfaces/IAliumCash.sol";
 
@@ -159,9 +158,7 @@ contract AliumVesting is Ownable, IAliumVesting {
             uint256 withdrawnBalance
         )
     {
-        if (planId >= MAX_LOCK_PLANS) {
-            return (totalBalance, frozenBalance, withdrawnBalance);
-        }
+        require(planId < MAX_LOCK_PLANS, "Vesting: planId is out of range");
 
         totalBalance = _lockTable[beneficiary][planId];
         withdrawnBalance = _withdrawTable[beneficiary][planId];
@@ -180,7 +177,9 @@ contract AliumVesting is Ownable, IAliumVesting {
         override
         returns (uint256)
     {
-        if (block.timestamp < releaseTime || _planId >= MAX_LOCK_PLANS) {
+        require(_planId < MAX_LOCK_PLANS, "Vesting: planId is out of range");
+
+        if (block.timestamp < releaseTime) {
             return 0;
         }
 
@@ -204,22 +203,19 @@ contract AliumVesting is Ownable, IAliumVesting {
     /**
      * @dev claim from all possible plans
      */
-    function claimAll(address _beneficiary) external override {
-        require(msg.sender == _beneficiary, "Vesting: caller is not the beneficiary");
-
+    function claimAll() external override {
         for (uint i = 0; i < MAX_LOCK_PLANS; i++) {
-            _claim(_beneficiary, i);
+            _claim(msg.sender, i);
         }
     }
 
     /**
      * @dev claim from a given plan
      */
-    function claim(address _beneficiary, uint256 _planId) external override {
-        require(msg.sender == _beneficiary, "Vesting: caller is not the beneficiary");
+    function claim(uint256 _planId) external override {
         require(_planId < MAX_LOCK_PLANS, "Vesting: planId is out of range");
 
-        _claim(_beneficiary, _planId);
+        _claim(msg.sender, _planId);
     }
 
     /**
@@ -260,6 +256,7 @@ contract AliumVesting is Ownable, IAliumVesting {
 
         uint items = percents.length;
 
+        require(lockPlanTimes[planId].length == 0, "Vesting: plan update is not possible");
         require(items > 0, "Vesting: invalid percents length");
         require(
             items == times.length,
@@ -364,8 +361,8 @@ contract AliumVesting is Ownable, IAliumVesting {
             uint256 reward = unlockedPlanned - claimedBalance;
             _withdrawTable[_beneficiary][_planId] =
             _withdrawTable[_beneficiary][_planId].add(reward);
-            emit TokensClaimed(_beneficiary, reward);
             IERC20(token).transfer(_beneficiary, reward);
+            emit TokensClaimed(_beneficiary, reward);
         }
     }
 

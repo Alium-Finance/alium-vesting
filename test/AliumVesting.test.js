@@ -12,7 +12,7 @@ const AliumVesting = artifacts.require('AliumVesting');
 const ALM = artifacts.require('MockALM');
 const AliumCash = artifacts.require('MockAliumCashbox');
 
-contract('AliumVesting contract', (accounts) => {
+contract('AliumVesting', (accounts) => {
     const OWNER = accounts[0];
     const HOLDER = accounts[1];
     const FREEZE_MASTER = accounts[2];
@@ -51,7 +51,7 @@ contract('AliumVesting contract', (accounts) => {
         await cashbox.setWalletLimit(vesting.address, ALM_TOTAL_SUPPLY);
     });
 
-    describe('As a generic user we', async function () {
+    describe('All required tests', async function () {
         it('Should fail if freeze account without permissions', async function () {
             const b = await aliumToken.balanceOf(HOLDER);
 
@@ -135,16 +135,10 @@ contract('AliumVesting contract', (accounts) => {
             assert.equal(balancePendingAfter.toString(), tokenAmount);
         });
 
-        it('Should fail on claim if beneficiary is not sender', async function () {
-            const planID = 0;
-
+        it('Should fail on exist plan update', async function () {
             await expectRevert(
-                vesting.claim(HOLDER, planID, { from: HACKER }),
-                'Vesting: caller is not the beneficiary',
-            );
-            await expectRevert(
-                vesting.claim(HOLDER, planID, { from: HACKER }),
-                'Vesting: caller is not the beneficiary',
+                vesting.addLockPlan(0, [ONE_DAY * 7, ONE_DAY * 14, ONE_DAY * 21], [33, 33, 34]),
+                'Vesting: plan update is not possible',
             );
         });
 
@@ -157,13 +151,13 @@ contract('AliumVesting contract', (accounts) => {
             await time.increase((await time.latest()).add(new BN(thirdPlanUnlockOffset)).addn(100));
 
             await vesting.freeze(HOLDER, tokenAmount, planID, { from: FREEZE_MASTER });
-            await vesting.claim(HOLDER, planID, { from: HOLDER });
+            await vesting.claim(planID, { from: HOLDER });
 
             assert.equal((await aliumToken.balanceOf(vesting.address)).toString(), 0);
  
             // check claim second time
             await vesting.freeze(HOLDER, 1000, planID, { from: FREEZE_MASTER });
-            await vesting.claim(HOLDER, planID, { from: HOLDER });
+            await vesting.claim(planID, { from: HOLDER });
 
             assert.equal((await aliumToken.balanceOf(vesting.address)).toString(), 0);
       
@@ -174,7 +168,7 @@ contract('AliumVesting contract', (accounts) => {
             await vesting.freeze(HOLDER, 2000, 1, { from: FREEZE_MASTER });
             await vesting.freeze(HOLDER, 3000, 2, { from: FREEZE_MASTER });
 
-            await vesting.claimAll(HOLDER, { from: HOLDER });
+            await vesting.claimAll({ from: HOLDER });
 
             assert.equal((await aliumToken.balanceOf(vesting.address)).toString(), 0);
         });
