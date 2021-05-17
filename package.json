@@ -1,6 +1,6 @@
 {
-  "name": "alium_test",
-  "version": "1.0.0",
+  "name": "alium-vesting",
+  "version": "1.0.1",
   "description": "Test suit for testing Alium contracts",
   "main": "truffle.js",
   "directories": {
@@ -26,7 +26,8 @@
     "eslint-plugin-standard": "^4.0.0",
     "prettier": "^2.2.1",
     "prettier-plugin-solidity": "^1.0.0-beta.5",
-    "solhint": "^3.3.4"
+    "solhint": "^3.3.4",
+    "truffle-flattener": "^1.5.0"
   },
   "scripts": {
     "serve": "truffle develop",
@@ -36,7 +37,7 @@
     "prettier": "npx prettier --write 'contracts/**/*.sol'",
     "lint:js": "eslint .",
     "lint:js:fix": "eslint . --fix",
-    "dist": "mkdir flat && truffle-flattener  ./contracts/AliumCashbox.sol > ./flat/AliumCashbox.Full.sol"
+    "dist": "truffle-flattener ./contracts/AliumVesting.sol | awk '/SPDX-License-Identifier/&&c++>0 {next} 1' | awk '/pragma experimental ABIEncoderV2;/&&c++>0 {next} 1' > ./flat/AliumVesting.Full.sol"
   },
   "repository": {
     "type": "git",
